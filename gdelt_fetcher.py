@@ -277,10 +277,9 @@ def process(df, event_date):
     df["domain"]      = df["SOURCEURL"].str.extract(r"https?://(?:www\.)?([^/:]+)")
     df["title"]       = df["SOURCEURL"].apply(extract_title)
     df["source_type"] = df["domain"].apply(classify_source)
-df["sentiment"] = pd.to_numeric(df["AvgTone"], errors="coerce").fillna(0).apply(
+    df["sentiment"] = pd.to_numeric(df["AvgTone"], errors="coerce").fillna(0).apply(
     lambda t: "Positive" if t > 2 else ("Negative" if t < -2 else "Neutral")
-)
-    df["event_date"]  = event_date
+    df["event_date"] = event_date
 
     classified = df.apply(
         lambda r: pd.Series(full_classify(str(r.get("title","")), r.get("EventRootCode"))),
