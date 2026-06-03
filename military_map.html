@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>GDELT Military Events — Live Map</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#07090f;color:#e2e8f0;font-family:'Inter',system-ui,sans-serif;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+
+header{background:#0f1219;border-bottom:1px solid rgba(255,255,255,.07);padding:10px 18px;display:flex;align-items:center;gap:14px;flex-shrink:0;height:50px}
+.logo{display:flex;align-items:center;gap:8px}
+.ldot{width:8px;height:8px;border-radius:50%;background:#f87171;animation:pulse 1.5s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(248,113,113,.5)}50%{opacity:.6;box-shadow:0 0 0 5px rgba(248,113,113,0)}}
+.lname{font-size:14px;font-weight:600;letter-spacing:-.2px}
+.lsub{font-size:10px;color:#64748b;font-family:monospace}
+.hpills{display:flex;gap:8px;align-items:center}
+.pill{font-size:11px;padding:3px 10px;border-radius:20px;background:#161b25;border:1px solid rgba(255,255,255,.07);color:#94a3b8;font-family:monospace;white-space:nowrap}
+.pill b{color:#f87171}
+.pill.live{border-color:rgba(248,113,113,.35);color:#f87171}
+.pill.ok{border-color:rgba(52,211,153,.35);color:#34d399}
+.controls{display:flex;gap:8px;margin-left:auto;align-items:center}
+.ctrl-btn{font-size:11px;padding:4px 12px;background:#161b25;border:1px solid rgba(255,255,255,.07);color:#94a3b8;border-radius:6px;cursor:pointer;font-family:system-ui;transition:all .15s}
+.ctrl-btn:hover{color:#e2e8f0;border-color:rgba(255,255,255,.15)}
+.ctrl-btn.active{border-color:rgba(248,113,113,.4);color:#f87171;background:rgba(248,113,113,.08)}
+
+#map{flex:1}
+
+/* Override Leaflet for dark theme */
+.leaflet-container{background:#07090f}
+.leaflet-tile{filter:brightness(.7) contrast(1.1) saturate(.6) hue-rotate(180deg)}
+
+/* Popup */
+.leaflet-popup-content-wrapper{background:#0f1219;border:1px solid rgba(255,255,255,.1);border-radius:10px;box-shadow:0 4px 20px rgba(0,0,0,.6);padding:0}
+.leaflet-popup-content{margin:0;min-width:240px;max-width:300px}
+.leaflet-popup-tip{background:#0f1219}
+.leaflet-popup-close-button{color:#64748b!important;font-size:18px!important;top:8px!important;right:10px!important}
+.popup-inner{padding:14px 16px}
+.popup-cat{font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:#f87171;margin-bottom:6px}
+.popup-title{font-size:13px;font-weight:500;color:#e2e8f0;line-height:1.4;margin-bottom:8px}
+.popup-meta{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.popup-badge{font-size:10px;padding:2px 7px;border-radius:20px}
+.neg{background:rgba(248,113,113,.12);color:#f87171}
+.pos{background:rgba(52,211,153,.1);color:#34d399}
+.neu{background:rgba(71,85,104,.2);color:#94a3b8}
+.popup-src{font-size:10px;color:#475569;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.popup-src a{color:#5b9cf6;text-decoration:none}
+.popup-src a:hover{text-decoration:underline}
+
+/* Bottom bar */
+.bottom-bar{background:#0f1219;border-top:1px solid rgba(255,255,255,.07);padding:8px 18px;display:flex;align-items:center;gap:12px;flex-shrink:0;height:38px}
+.bb-item{font-size:11px;color:#64748b;display:flex;align-items:center;gap:5px}
+.bb-dot{width:8px;height:8px;border-radius:50%}
+.bb-sep{color:#1e2433}
+#status-msg{font-size:11px;color:#64748b;margin-left:auto;font-family:monospace}
+
+/* Loading overlay */
+#loading-overlay{position:absolute;top:50px;left:0;right:0;bottom:38px;background:rgba(7,9,15,.85);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;z-index:1000}
+.spinner{width:36px;height:36px;border:3px solid rgba(255,255,255,.08);border-top-color:#f87171;border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+#loading-text{font-size:13px;color:#64748b}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="ldot"></div>
+    <div>
+      <div class="lname">Military Events — Live Map</div>
+      <div class="lsub">GDELT · updates every 15 min</div>
+    </div>
+  </div>
+  <div class="hpills">
+    <div class="pill live">● Live</div>
+    <div class="pill">Events <b id="count">—</b></div>
+    <div class="pill" id="time-pill">Last update: —</div>
+    <div class="pill" id="next-pill">Next: —</div>
+  </div>
+  <div class="controls">
+    <button class="ctrl-btn active" id="btn-mil" onclick="setFilter('military')">Military</button>
+    <button class="ctrl-btn" id="btn-sec" onclick="setFilter('security')">Security</button>
+    <button class="ctrl-btn" id="btn-all" onclick="setFilter('all')">All conflict</button>
+    <button class="ctrl-btn" onclick="fetchNow()">↻ Refresh</button>
+  </div>
+</header>
+
+<div style="position:relative;flex:1;display:flex;flex-direction:column">
+  <div id="map"></div>
+  <div id="loading-overlay">
+    <div class="spinner"></div>
+    <div id="loading-text">Fetching latest GDELT data...</div>
+  </div>
+</div>
+
+<div class="bottom-bar">
+  <div class="bb-item"><div class="bb-dot" style="background:#ef4444"></div> Armed Conflict</div>
+  <span class="bb-sep">|</span>
+  <div class="bb-item"><div class="bb-dot" style="background:#fb923c"></div> Military Affairs</div>
+  <span class="bb-sep">|</span>
+  <div class="bb-item"><div class="bb-dot" style="background:#f87171"></div> Security</div>
+  <span class="bb-sep">|</span>
+  <div class="bb-item"><div class="bb-dot" style="background:#fbbf24"></div> Terrorism</div>
+  <span class="bb-sep">|</span>
+  <div class="bb-item" style="color:#475569">Size = mentions</div>
+  <div id="status-msg">Initializing...</div>
+</div>
+
+<script>
+const GDELT_COLS = [
+  'GlobalEventID','Day','MonthYear','Year','FractionDate',
+  'Actor1Code','Actor1Name','Actor1CountryCode','Actor1KnownGroupCode',
+  'Actor1EthnicCode','Actor1Religion1Code','Actor1Religion2Code',
+  'Actor1Type1Code','Actor1Type2Code','Actor1Type3Code',
+  'Actor2Code','Actor2Name','Actor2CountryCode','Actor2KnownGroupCode',
+  'Actor2EthnicCode','Actor2Religion1Code','Actor2Religion2Code',
+  'Actor2Type1Code','Actor2Type2Code','Actor2Type3Code',
+  'IsRootEvent','EventCode','EventBaseCode','EventRootCode',
+  'QuadClass','GoldsteinScale','NumMentions','NumSources',
+  'NumArticles','AvgTone','Actor1Geo_Type','Actor1Geo_FullName',
+  'Actor1Geo_CountryCode','Actor1Geo_ADM1Code','Actor1Geo_Lat',
+  'Actor1Geo_Long','Actor1Geo_FeatureID','Actor2Geo_Type',
+  'Actor2Geo_FullName','Actor2Geo_CountryCode','Actor2Geo_ADM1Code',
+  'Actor2Geo_Lat','Actor2Geo_Long','Actor2Geo_FeatureID',
+  'ActionGeo_Type','ActionGeo_FullName','ActionGeo_CountryCode',
+  'ActionGeo_ADM1Code','ActionGeo_Lat','ActionGeo_Long',
+  'ActionGeo_FeatureID','DATEADDED','SOURCEURL'
+];
+
+const IDX = {};
+GDELT_COLS.forEach((c,i) => IDX[c] = i);
+
+// Classification
+const MILITARY_CODES = new Set([15,19,20]);
+const SECURITY_CODES = new Set([13,17,18]);
+const TERROR_KW = ['terrorist','terrorism','bomb blast','suicide bomb','gunmen','militant attack','isis','al qaeda','boko haram','al shabaab','explosion kills','attack killed'];
+const MILITARY_KW = ['airstrike','air strike','missile','drone strike','troops','soldiers','military operation','armed forces','tank','artillery','shelling','warship','fighter jet','killed in strike','idf','houthi','rocket fire','ceasefire'];
+const SECURITY_KW = ['arrested','detained','sentenced','convicted','shooting','stabbing','cartel','gang','drug bust'];
+
+function classify(row) {
+  const code = parseInt(row[IDX['EventRootCode']]);
+  const url  = (row[IDX['SOURCEURL']]||'').toLowerCase();
+  const title = extractSlug(url).toLowerCase();
+  if(TERROR_KW.some(k=>title.includes(k))) return {cat:'Terrorism',color:'#fbbf24'};
+  if(MILITARY_KW.some(k=>title.includes(k))) return {cat:'Armed Conflict',color:'#ef4444'};
+  if(MILITARY_CODES.has(code)) return {cat:'Military Affairs',color:'#fb923c'};
+  if(SECURITY_CODES.has(code)) return {cat:'Security',color:'#f87171'};
+  return null;
+}
+
+function extractSlug(url) {
+  if(!url) return '';
+  const path = url.split('?')[0].rstrip ? url.split('?')[0] : url.split('?')[0];
+  const segs = path.split('/');
+  for(let i=segs.length-1;i>=0;i--){
+    let s = segs[i].replace(/\.(html?|php|aspx?)$/i,'');
+    if(s.length>8 && !/^[\d\-]+$/.test(s) && !/^[a-f0-9\-]{20,}$/.test(s))
+      return s.replace(/[-_]/g,' ');
+  }
+  return '';
+}
+
+// Map setup
+const map = L.map('map', {
+  center: [20, 10],
+  zoom: 2,
+  zoomControl: true,
+  attributionControl: false,
+});
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+  maxZoom:18, opacity:0.6
+}).addTo(map);
+
+let markersLayer = L.layerGroup().addTo(map);
+let allEvents = [];
+let activeFilter = 'military';
+let refreshTimer = null;
+let countdown = 900;
+
+function setFilter(f) {
+  activeFilter = f;
+  document.getElementById('btn-mil').classList.toggle('active', f==='military');
+  document.getElementById('btn-sec').classList.toggle('active', f==='security');
+  document.getElementById('btn-all').classList.toggle('active', f==='all');
+  renderMarkers();
+}
+
+function renderMarkers() {
+  markersLayer.clearLayers();
+  let shown = 0;
+  allEvents.forEach(ev => {
+    const {cat, color, lat, lng, title, goldstein, mentions, sentiment, domain, url} = ev;
+    if(activeFilter==='military' && cat!=='Armed Conflict' && cat!=='Military Affairs') return;
+    if(activeFilter==='security' && cat!=='Security' && cat!=='Terrorism') return;
+    const r = Math.max(4, Math.min(14, 4 + Math.sqrt(mentions||1)*1.2));
+    const circle = L.circleMarker([lat,lng],{
+      radius: r,
+      fillColor: color,
+      color: color,
+      weight: 1,
+      opacity: 0.8,
+      fillOpacity: 0.55,
+    });
+    const sClass = sentiment==='Negative'?'neg':sentiment==='Positive'?'pos':'neu';
+    circle.bindPopup(`
+      <div class="popup-inner">
+        <div class="popup-cat">${cat}</div>
+        <div class="popup-title">${title||'(no headline)'}</div>
+        <div class="popup-meta">
+          <span class="popup-badge ${sClass}">${sentiment}</span>
+          <span class="popup-badge neu">G: ${goldstein>0?'+':''}${parseFloat(goldstein||0).toFixed(1)}</span>
+          <span class="popup-badge neu">${mentions} mentions</span>
+        </div>
+        <div class="popup-src"><a href="${url}" target="_blank">${domain}</a></div>
+      </div>
+    `, {maxWidth:300});
+    markersLayer.addLayer(circle);
+    shown++;
+  });
+  document.getElementById('count').textContent = shown;
+}
+
+async function fetchNow() {
+  document.getElementById('loading-overlay').style.display = 'flex';
+  document.getElementById('loading-text').textContent = 'Fetching latest GDELT data...';
+  document.getElementById('status-msg').textContent = 'Fetching...';
+  try {
+    const txt = await fetch('http://data.gdeltproject.org/gdeltv2/lastupdate.txt',{cache:'no-store'}).then(r=>r.text());
+    const url = txt.split('\n').map(l=>l.trim().split(' ')).find(p=>p.length>=3&&p[2].includes('export.CSV'))?.[2];
+    if(!url) throw new Error('No export URL found');
+    document.getElementById('loading-text').textContent = 'Downloading: '+url.split('/').pop();
+    const zip = await fetch(url,{cache:'no-store'}).then(r=>r.arrayBuffer());
+    document.getElementById('loading-text').textContent = 'Parsing CSV...';
+    const csv = await unzipCSV(zip);
+    const rows = csv.split('\n');
+    allEvents = [];
+    rows.forEach(line => {
+      if(!line.trim()) return;
+      const row = line.split('\t');
+      if(row.length < 57) return;
+      const lat = parseFloat(row[IDX['ActionGeo_Lat']]);
+      const lng = parseFloat(row[IDX['ActionGeo_Long']]);
+      if(isNaN(lat)||isNaN(lng)||lat===0&&lng===0) return;
+      if(lat<-90||lat>90||lng<-180||lng>180) return;
+      const c = classify(row);
+      if(!c) return;
+      const url2 = row[IDX['SOURCEURL']]||'';
+      const domain = url2.replace(/https?:\/\/(www\.)?/,'').split('/')[0];
+      const sentiment = parseFloat(row[IDX['AvgTone']]||0)>2?'Positive':parseFloat(row[IDX['AvgTone']]||0)<-2?'Negative':'Neutral';
+      allEvents.push({
+        cat: c.cat, color: c.color,
+        lat, lng,
+        title: extractSlug(url2).replace(/\b\w/g,x=>x.toUpperCase()),
+        goldstein: row[IDX['GoldsteinScale']]||0,
+        mentions: parseInt(row[IDX['NumMentions']]||0),
+        sentiment,
+        domain,
+        url: url2,
+      });
+    });
+    const now = new Date();
+    document.getElementById('time-pill').textContent = 'Updated: '+now.toLocaleTimeString();
+    document.getElementById('status-msg').textContent = `${allEvents.length} conflict events loaded`;
+    countdown = 900;
+    renderMarkers();
+  } catch(e) {
+    document.getElementById('status-msg').textContent = 'Error: '+e.message;
+    console.error(e);
+  }
+  document.getElementById('loading-overlay').style.display = 'none';
+}
+
+async function unzipCSV(buffer) {
+  const ds = new DecompressionStream('deflate-raw');
+  const blob = new Blob([buffer]);
+  const stream = blob.stream().pipeThrough(ds);
+  const out = await new Response(stream).arrayBuffer();
+  return new TextDecoder().decode(out);
+}
+
+// Countdown timer
+function tick() {
+  countdown--;
+  const m = Math.floor(countdown/60);
+  const s = countdown%60;
+  document.getElementById('next-pill').textContent = `Next: ${m}:${s.toString().padStart(2,'0')}`;
+  if(countdown<=0) fetchNow();
+}
+
+// DecompressionStream fallback — use JSZip if native not available
+async function unzipCSVSafe(buffer) {
+  if(typeof DecompressionStream !== 'undefined') {
+    try { return await unzipCSV(buffer); } catch(e){}
+  }
+  return new Promise((resolve,reject)=>{
+    const script = document.createElement('script');
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+    script.onload = async ()=>{
+      const zip = await JSZip.loadAsync(buffer);
+      const files = Object.values(zip.files);
+      const csv = await files[0].async('text');
+      resolve(csv);
+    };
+    script.onerror = reject;
+    document.head.appendChild(script);
+  });
+}
+
+// Override with safe version
+window.unzipCSV_orig = unzipCSV;
+window.unzipCSV = unzipCSVSafe;
+
+fetchNow();
+setInterval(tick, 1000);
+setInterval(fetchNow, 900000);
+</script>
+</body>
+</html>
