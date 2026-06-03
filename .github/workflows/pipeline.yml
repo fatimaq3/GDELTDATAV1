@@ -9,21 +9,17 @@ jobs:
   fetch-and-store:
     runs-on: ubuntu-latest
     timeout-minutes: 30
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
       - name: Install dependencies
         run: pip install requests pandas supabase
-
       - name: Run GDELT pipeline
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-          run: python gdelt_fetcher_1.py
+        run: python gdelt_fetcher_1.py
