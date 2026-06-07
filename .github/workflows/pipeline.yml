@@ -2,7 +2,7 @@ name: GDELT Daily Pipeline
 
 on:
   schedule:
-    - cron: "0 21 * * *"
+    - cron: "0 12 * * *"   # 12:00 UTC = 15:00 Riyadh (AST, UTC+3)
   workflow_dispatch:
 
 jobs:
