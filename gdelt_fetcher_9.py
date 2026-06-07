@@ -361,7 +361,7 @@ def classify_source(domain):
 
 
 def fetch_latest_url():
-    target = (datetime.now(timezone.utc) - timedelta(days=1)).strftime("%Y%m%d")
+    target = "20260605"
     url = f"http://data.gdeltproject.org/events/{target}.export.CSV.zip"
     date_str = f"{target[:4]}-{target[4:6]}-{target[6:8]}"
     log.info(f"Checking GDELT v1 daily file for: {date_str}")
