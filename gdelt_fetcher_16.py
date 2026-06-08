@@ -373,7 +373,7 @@ def classify_source(domain):
 
 def fetch_latest_url():
     # Try yesterday first, then 2 days ago as fallback
-    for days_back in [1, 2]:
+    for days_back in [2, 3]:
         target = (datetime.now(timezone.utc) - timedelta(days=days_back)).strftime("%Y%m%d")
         url = f"http://data.gdeltproject.org/events/{target}.export.CSV.zip"
         date_str = f"{target[:4]}-{target[4:6]}-{target[6:8]}"
